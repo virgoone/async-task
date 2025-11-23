@@ -17,6 +17,14 @@ export type AsyncState<T, TError = unknown> = {
 };
 
 /**
+ * 执行上下文，包含额外的执行信息
+ */
+export interface ExecutionContext {
+	/** AbortSignal，用于取消请求 */
+	signal: AbortSignal;
+}
+
+/**
  * useAsyncTask 的配置选项
  */
 export interface UseAsyncTaskOptions<_T, Args extends any[]> {

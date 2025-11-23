@@ -3,6 +3,7 @@
 // 导出类型定义
 export type {
 	AsyncState,
+	ExecutionContext,
 	UseAsyncTaskOptions,
 	UseAsyncTaskResult,
 } from "./types";

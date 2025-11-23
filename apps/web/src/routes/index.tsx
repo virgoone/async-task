@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AlertCircle, CheckCircle2, Loader2, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useAsyncTask } from "use-async-task";
+import { type ExecutionContext, useAsyncTask } from "use-async-task";
 import { Button } from "@/components/ui/button";
 import {
 	Card,
@@ -117,10 +117,11 @@ function SearchDemo() {
 		SearchItem[],
 		Error
 	>(
-		async (q: string) => {
+		async (q: string, context?: ExecutionContext) => {
 			if (!q) return [];
 			const response = await fetch(
 				`${API_BASE}/api/search?q=${encodeURIComponent(q)}`,
+				{ signal: context?.signal },
 			);
 			if (!response.ok) throw new Error("搜索失败");
 			return response.json() as Promise<SearchItem[]>;
@@ -144,7 +145,8 @@ function SearchDemo() {
 			<CardHeader>
 				<CardTitle>Demo 2: 搜索响应</CardTitle>
 				<CardDescription>
-					竞态控制 + 30秒缓存（尝试快速输入或回退查看效果）
+					真正的请求取消 + 竞态控制 +
+					30秒缓存（快速输入时会取消旧请求，回退时使用缓存）
 				</CardDescription>
 			</CardHeader>
 			<CardContent className="space-y-4">

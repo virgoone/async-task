@@ -1,5 +1,6 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import type { ExecutionContext } from "../types";
 import { useAsyncTask } from "../useAsyncTask";
 
 describe("useAsyncTask", () => {
@@ -79,6 +80,82 @@ describe("useAsyncTask", () => {
 				expect(result.current.retryCount).toBe(0);
 				expect(result.current.lastUpdated).toBeNull();
 			});
+		});
+	});
+
+	describe("AbortSignal 支持", () => {
+		it("应该传递 ExecutionContext 给 action", async () => {
+			const action = vi.fn().mockResolvedValue("success");
+			const { result } = renderHook(() => useAsyncTask(action));
+
+			await result.current.execute("arg1");
+
+			await waitFor(() => {
+				expect(action).toHaveBeenCalled();
+				// 检查是否传递了第二个参数（ExecutionContext）
+				const secondArg = action.mock.calls[0][1];
+				expect(secondArg).toBeDefined();
+				expect(secondArg).toHaveProperty("signal");
+				expect(secondArg.signal).toBeInstanceOf(AbortSignal);
+			});
+		});
+
+		it("取消请求时应该 abort signal", async () => {
+			let capturedSignal: AbortSignal | undefined;
+
+			const action = vi.fn(async (_arg: string, context?: ExecutionContext) => {
+				capturedSignal = context?.signal;
+				// 模拟长时间运行的任务
+				await new Promise((resolve) => setTimeout(resolve, 100));
+				return "success";
+			});
+
+			const { result } = renderHook(() => useAsyncTask(action));
+
+			// 启动任务
+			result.current.execute("test");
+
+			// 等待 action 被调用
+			await waitFor(() => {
+				expect(action).toHaveBeenCalled();
+			});
+
+			// 取消任务
+			result.current.cancel();
+
+			// 验证 signal 被 abort
+			await waitFor(() => {
+				expect(capturedSignal?.aborted).toBe(true);
+			});
+		});
+
+		it("竞态控制：新请求应该取消旧请求的 signal", async () => {
+			const signals: AbortSignal[] = [];
+
+			const action = vi.fn(async (_arg: string, context?: ExecutionContext) => {
+				if (context?.signal) {
+					signals.push(context.signal);
+				}
+				await new Promise((resolve) => setTimeout(resolve, 50));
+				return "success";
+			});
+
+			const { result } = renderHook(() => useAsyncTask(action));
+
+			// 快速发起两个请求
+			result.current.execute("request1");
+			await new Promise((resolve) => setTimeout(resolve, 10));
+			result.current.execute("request2");
+
+			// 等待两个请求都被调用
+			await waitFor(() => {
+				expect(signals.length).toBe(2);
+			});
+
+			// 第一个请求的 signal 应该被 abort
+			expect(signals[0].aborted).toBe(true);
+			// 第二个请求的 signal 应该还是活跃的
+			expect(signals[1].aborted).toBe(false);
 		});
 	});
 });

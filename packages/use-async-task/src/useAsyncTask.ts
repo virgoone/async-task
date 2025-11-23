@@ -9,6 +9,7 @@ import {
 } from "./store";
 import type {
 	AsyncState,
+	ExecutionContext,
 	UseAsyncTaskOptions,
 	UseAsyncTaskResult,
 } from "./types";
@@ -16,14 +17,17 @@ import type {
 /**
  * 用于管理复杂异步任务的 React Hook
  *
- * @param action 要执行的异步函数
+ * @param action 要执行的异步函数（可以接收一个额外的 ExecutionContext 参数，包含 signal）
  * @param options 配置选项
  * @returns 包含状态和控制函数的对象
  *
  * @example
  * ```tsx
  * const { data, loading, error, execute } = useAsyncTask(
- *   async (userId: string) => fetchUser(userId),
+ *   async (userId: string, context?: ExecutionContext) => {
+ *     const response = await fetch(`/api/user/${userId}`, { signal: context?.signal });
+ *     return response.json();
+ *   },
  *   {
  *     taskKey: (id) => `user-${id}`,
  *     cacheTime: 30000,
@@ -33,7 +37,7 @@ import type {
  * ```
  */
 export function useAsyncTask<Args extends any[], T, TError = unknown>(
-	action: (...args: Args) => Promise<T>,
+	action: (...args: [...Args, ExecutionContext?]) => Promise<T>,
 	options: UseAsyncTaskOptions<T, Args> = {},
 ): UseAsyncTaskResult<Args, T, TError> {
 	const {
@@ -50,6 +54,9 @@ export function useAsyncTask<Args extends any[], T, TError = unknown>(
 
 	// 当前请求 ID（用于竞态控制）
 	const requestIdRef = useRef(0);
+
+	// AbortController（用于取消请求）
+	const abortControllerRef = useRef<AbortController | null>(null);
 
 	// 轮询定时器
 	const pollingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -126,6 +133,15 @@ export function useAsyncTask<Args extends any[], T, TError = unknown>(
 				}
 			}
 
+			// 取消之前的请求
+			if (abortControllerRef.current) {
+				abortControllerRef.current.abort();
+			}
+
+			// 创建新的 AbortController
+			const abortController = new AbortController();
+			abortControllerRef.current = abortController;
+
 			// 生成新的请求 ID
 			const currentRequestId = ++requestIdRef.current;
 
@@ -144,12 +160,20 @@ export function useAsyncTask<Args extends any[], T, TError = unknown>(
 			// 定义执行函数（用于重试）
 			const performAction = async (retryCount = 0): Promise<T | void> => {
 				try {
-					const result = await currentAction(...args);
+					// 创建执行上下文
+					const context: ExecutionContext = {
+						signal: abortController.signal,
+					};
 
-					// 检查请求是否已过期（竞态控制）
+					// 调用 action，传递参数和上下文
+					// 使用类型断言来绕过 TypeScript 的严格检查
+					const result = await (currentAction as any)(...args, context);
+
+					// 检查请求是否已过期（竞态控制）或被取消
 					if (
 						unmountedRef.current ||
-						currentRequestId !== requestIdRef.current
+						currentRequestId !== requestIdRef.current ||
+						abortController.signal.aborted
 					) {
 						return;
 					}
@@ -171,8 +195,18 @@ export function useAsyncTask<Args extends any[], T, TError = unknown>(
 						} as any);
 					}
 
+					// 清除 AbortController
+					if (abortControllerRef.current === abortController) {
+						abortControllerRef.current = null;
+					}
+
 					return result;
 				} catch (err) {
+					// 检查是否是因为 abort 导致的错误
+					if (abortController.signal.aborted) {
+						return;
+					}
+
 					// 检查请求是否已过期
 					if (
 						unmountedRef.current ||
@@ -205,6 +239,11 @@ export function useAsyncTask<Args extends any[], T, TError = unknown>(
 							requestId: currentRequestId,
 						} as any);
 					}
+
+					// 清除 AbortController
+					if (abortControllerRef.current === abortController) {
+						abortControllerRef.current = null;
+					}
 				}
 			};
 
@@ -219,6 +258,11 @@ export function useAsyncTask<Args extends any[], T, TError = unknown>(
 	const cancel = useCallback(() => {
 		// 增加请求 ID，使当前请求失效
 		requestIdRef.current++;
+		// 取消正在进行的请求
+		if (abortControllerRef.current) {
+			abortControllerRef.current.abort();
+			abortControllerRef.current = null;
+		}
 		// 清除轮询
 		if (pollingTimerRef.current) {
 			clearTimeout(pollingTimerRef.current);
@@ -328,6 +372,11 @@ export function useAsyncTask<Args extends any[], T, TError = unknown>(
 	useEffect(() => {
 		return () => {
 			unmountedRef.current = true;
+			// 取消正在进行的请求
+			if (abortControllerRef.current) {
+				abortControllerRef.current.abort();
+			}
+			// 清除轮询
 			if (pollingTimerRef.current) {
 				clearTimeout(pollingTimerRef.current);
 			}

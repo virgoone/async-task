@@ -86,15 +86,20 @@ function TodoList() {
 }
 ```
 
-### 搜索与缓存
+### 搜索与缓存（支持请求取消）
 
 ```tsx
+import { useAsyncTask, type ExecutionContext } from 'use-async-task'
+
 function Search() {
   const [query, setQuery] = useState('')
 
   const { data, loading, execute } = useAsyncTask(
-    async (q: string) => {
-      const response = await fetch(`/api/search?q=${q}`)
+    async (q: string, context?: ExecutionContext) => {
+      // 使用 context.signal 支持请求取消
+      const response = await fetch(`/api/search?q=${q}`, {
+        signal: context?.signal
+      })
       return response.json()
     },
     {
@@ -217,7 +222,7 @@ function ComponentB() {
 
 ```typescript
 function useAsyncTask<Args extends any[], T, TError = unknown>(
-  action: (...args: Args) => Promise<T>,
+  action: (...args: [...Args, ExecutionContext?]) => Promise<T>,
   options?: UseAsyncTaskOptions<T, Args>
 ): UseAsyncTaskResult<Args, T, TError>
 ```
@@ -226,10 +231,20 @@ function useAsyncTask<Args extends any[], T, TError = unknown>(
 
 **action**
 
-要执行的异步函数。
+要执行的异步函数。可以接收一个可选的 `ExecutionContext` 参数作为最后一个参数，用于访问 `AbortSignal`。
 
 ```typescript
 (...args: Args) => Promise<T>
+// 或
+(...args: [...Args, ExecutionContext?]) => Promise<T>
+```
+
+**ExecutionContext**
+
+```typescript
+interface ExecutionContext {
+  signal: AbortSignal  // 用于取消请求的 AbortSignal
+}
 ```
 
 **options** (可选)
@@ -340,9 +355,11 @@ const { data, loading } = useAsyncTask(
 
 ## 🎯 高级功能
 
-### 竞态控制
+### 竞态控制与请求取消
 
 当快速切换参数时（如搜索输入），useAsyncTask 会自动取消旧请求，只保留最新请求的结果。
+
+**方式一：自动忽略旧请求结果（默认行为）**
 
 ```tsx
 const [userId, setUserId] = useState('1')
@@ -356,6 +373,56 @@ const { data } = useAsyncTask(
 )
 
 // 快速切换 userId 时，只有最后一次请求的结果会被显示
+// 但网络请求仍会继续执行
+```
+
+**方式二：真正取消网络请求（推荐）**
+
+使用 `ExecutionContext` 中的 `signal` 来真正取消网络请求：
+
+```tsx
+import { useAsyncTask, type ExecutionContext } from 'use-async-task'
+
+const [userId, setUserId] = useState('1')
+
+const { data } = useAsyncTask(
+  async (id: string, context?: ExecutionContext) => {
+    // 传入 signal 到 fetch，支持真正的请求取消
+    const response = await fetch(`/api/users/${id}`, {
+      signal: context?.signal
+    })
+    return response.json()
+  },
+  {
+    immediate: true,
+    dependencies: [userId],
+  }
+)
+
+// 快速切换 userId 时：
+// 1. 旧请求会被真正取消（浏览器停止网络传输）
+// 2. 新请求立即开始
+// 3. 只显示最新请求的结果
+```
+
+**使用 axios 或其他 HTTP 库：**
+
+```tsx
+import axios from 'axios'
+
+const { data } = useAsyncTask(
+  async (query: string, context?: ExecutionContext) => {
+    const response = await axios.get(`/api/search`, {
+      params: { q: query },
+      signal: context?.signal  // axios 也支持 AbortSignal
+    })
+    return response.data
+  },
+  {
+    taskKey: (q) => `search-${q}`,
+    cacheTime: 30000,
+  }
+)
 ```
 
 ### 缓存管理
@@ -404,7 +471,15 @@ const stopPolling = () => {
 
 2. **内存缓存**: 缓存仅存在于内存中，刷新页面后会清空。
 
-3. **取消机制**: `cancel()` 不会真正中断 Promise 执行，只会忽略其结果。如果需要真正取消请求，请在 action 中使用 AbortController。
+3. **取消机制**: 
+   - `cancel()` 会忽略当前请求的结果，避免状态更新
+   - 如果需要真正取消网络请求，请在 action 中使用 `context.signal`：
+     ```tsx
+     async (params, context?: ExecutionContext) => {
+       return fetch(url, { signal: context?.signal })
+     }
+     ```
+   - 使用 `context.signal` 可以在请求被取消时立即中止网络传输，节省带宽
 
 4. **依赖数组**: `dependencies` 的行为类似 `useEffect`，变化时会重置状态并重新执行。
 
