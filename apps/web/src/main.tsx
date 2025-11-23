@@ -1,4 +1,4 @@
-import { RouterProvider, createRouter } from "@tanstack/react-router";
+import { createRouter, RouterProvider } from "@tanstack/react-router";
 import ReactDOM from "react-dom/client";
 import Loader from "./components/loader";
 import { routeTree } from "./routeTree.gen";
@@ -16,6 +16,19 @@ declare module "@tanstack/react-router" {
 	}
 }
 
+// 启动 MSW
+async function enableMocking() {
+	if (import.meta.env.MODE !== "development") {
+		return;
+	}
+
+	const { worker } = await import("./mocks/browser");
+
+	return worker.start({
+		onUnhandledRequest: "bypass",
+	});
+}
+
 const rootElement = document.getElementById("app");
 
 if (!rootElement) {
@@ -23,6 +36,8 @@ if (!rootElement) {
 }
 
 if (!rootElement.innerHTML) {
-	const root = ReactDOM.createRoot(rootElement);
-	root.render(<RouterProvider router={router} />);
+	enableMocking().then(() => {
+		const root = ReactDOM.createRoot(rootElement);
+		root.render(<RouterProvider router={router} />);
+	});
 }

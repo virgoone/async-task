@@ -24,7 +24,8 @@
 			"!**/.alchemy",
 			"!**/.svelte-kit",
 			"!**/wrangler.jsonc",
-			"!**/.source"
+			"!**/.source",
+			"!**/mockServiceWorker.js"
 		]
 	},
 	"formatter": {
@@ -37,7 +38,8 @@
 		"rules": {
 			"recommended": true,
 			"correctness": {
-				"useExhaustiveDependencies": "info"
+				"useExhaustiveDependencies": "off",
+				"noUnusedVariables": "warn"
 			},
 			"nursery": {
 				"useSortedClasses": {
@@ -47,6 +49,14 @@
 						"functions": ["clsx", "cva", "cn"]
 					}
 				}
+			},
+			"suspicious": {
+				"noExplicitAny": "warn",
+				"noConfusingVoidType": "warn",
+				"noArrayIndexKey": "warn"
+			},
+			"complexity": {
+				"noBannedTypes": "warn"
 			},
 			"style": {
 				"noParameterAssign": "error",
@@ -58,7 +68,8 @@
 				"noUnusedTemplateLiteral": "error",
 				"useNumberNamespace": "error",
 				"noInferrableTypes": "error",
-				"noUselessElse": "error"
+				"noUselessElse": "error",
+				"noNonNullAssertion": "warn"
 			}
 		}
 	},
