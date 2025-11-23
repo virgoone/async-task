@@ -21,13 +21,27 @@ export const Route = createFileRoute("/")({
 const API_BASE = "";
 
 // Demo 1: 列表加载和翻页
+interface ListItem {
+	id: string;
+	title: string;
+}
+
+interface ListData {
+	items: ListItem[];
+	total: number;
+}
+
 function PaginationDemo() {
 	const [page, setPage] = useState(1);
 
-	const { data, loading, error, execute } = useAsyncTask(async (p: number) => {
+	const { data, loading, error, execute } = useAsyncTask<
+		[number],
+		ListData,
+		Error
+	>(async (p: number) => {
 		const response = await fetch(`${API_BASE}/api/list?page=${p}`);
 		if (!response.ok) throw new Error("加载失败");
-		return response.json();
+		return response.json() as Promise<ListData>;
 	});
 
 	// page 变化时自动加载
@@ -57,7 +71,7 @@ function PaginationDemo() {
 				) : data ? (
 					<>
 						<div className="space-y-2">
-							{data.items.map((item) => (
+							{data.items.map((item: ListItem) => (
 								<div key={item.id} className="rounded-lg border p-3">
 									{item.title}
 								</div>
@@ -90,21 +104,30 @@ function PaginationDemo() {
 }
 
 // Demo 2: 搜索响应（竞态控制 + 缓存）
+interface SearchItem {
+	id: string;
+	title: string;
+}
+
 function SearchDemo() {
 	const [query, setQuery] = useState("");
 
-	const { data, loading, error, lastUpdated, execute } = useAsyncTask(
+	const { data, loading, error, lastUpdated, execute } = useAsyncTask<
+		[string],
+		SearchItem[],
+		Error
+	>(
 		async (q: string) => {
 			if (!q) return [];
 			const response = await fetch(
 				`${API_BASE}/api/search?q=${encodeURIComponent(q)}`,
 			);
 			if (!response.ok) throw new Error("搜索失败");
-			return response.json();
+			return response.json() as Promise<SearchItem[]>;
 		},
 		{
 			cacheTime: 30000, // 30秒缓存
-			taskKey: (q) => `search-${q}`,
+			taskKey: (q: string) => `search-${q}`,
 		},
 	);
 
@@ -147,7 +170,7 @@ function SearchDemo() {
 				) : data && data.length > 0 ? (
 					<>
 						<div className="space-y-2">
-							{data.map((item) => (
+							{data.map((item: SearchItem) => (
 								<div key={item.id} className="rounded-lg border p-3">
 									{item.title}
 								</div>
@@ -241,7 +264,11 @@ function RetryDemo() {
 	const [shouldFail, setShouldFail] = useState(true);
 	const [requestCount, setRequestCount] = useState(0);
 
-	const { data, loading, error, retryCount, execute } = useAsyncTask(
+	const { data, loading, error, retryCount, execute } = useAsyncTask<
+		[],
+		{ message: string },
+		Error
+	>(
 		async () => {
 			setRequestCount((c) => c + 1);
 			const response = await fetch(
@@ -251,7 +278,7 @@ function RetryDemo() {
 				const error = await response.json();
 				throw new Error(error.error || "请求失败");
 			}
-			return response.json();
+			return response.json() as Promise<{ message: string }>;
 		},
 		{
 			maxRetries: 3,
@@ -306,7 +333,9 @@ function RetryDemo() {
 				{error && (
 					<div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-red-700">
 						<AlertCircle className="h-5 w-5" />
-						<span>{error.message}</span>
+						<span>
+							{error instanceof Error ? error.message : String(error)}
+						</span>
 					</div>
 				)}
 

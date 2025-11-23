@@ -2,6 +2,8 @@
 
 一个强大的 React Hook，用于管理复杂的异步任务状态。提供类似 SWR 或 React Query 的能力，但更轻量且专注于特定需求。
 
+[![wakatime](https://wakatime.com/badge/user/c9cd066e-df5e-4417-b139-f216e215428a/project/f0d50657-3333-4bc5-a1b0-a49984d48684.svg)](https://wakatime.com/badge/user/c9cd066e-df5e-4417-b139-f216e215428a/project/f0d50657-3333-4bc5-a1b0-a49984d48684)
+
 ## ✨ 特性
 
 - 🔄 **完整的状态管理** - loading、error、data、retryCount、lastUpdated
