@@ -12,7 +12,8 @@
 		"rootDirs": ["."],
 		"baseUrl": ".",
 		"paths": {
-			"@/*": ["./src/*"]
+			"@/*": ["./src/*"],
+			"use-async-task": ["../../packages/use-async-task/src/index.ts"]
 		}
 	}
 }
