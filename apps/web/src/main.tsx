@@ -18,7 +18,13 @@ declare module "@tanstack/react-router" {
 
 // 启动 MSW
 async function enableMocking() {
-	if (import.meta.env.MODE !== "development") {
+	// 可以通过环境变量 VITE_ENABLE_MSW 来控制是否启用 MSW
+	// 默认只在开发环境启用，但可以通过设置 VITE_ENABLE_MSW=true 来在生产环境启用
+	const shouldEnableMSW =
+		import.meta.env.MODE === "development" ||
+		import.meta.env.VITE_ENABLE_MSW === "true";
+
+	if (!shouldEnableMSW) {
 		return;
 	}
 

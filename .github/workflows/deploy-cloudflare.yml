@@ -31,6 +31,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build application
+        env:
+          # 如果需要启用 MSW，设置 VITE_ENABLE_MSW=true
+          VITE_ENABLE_MSW: "true"
         run: |
           pnpm run build
 
