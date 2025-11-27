@@ -47,6 +47,26 @@ export function useAsyncTask<Args extends any[], T, TError = unknown>(
 		taskKey,
 	} = options;
 
+	// 使用 state 存储 resolved key（基于实际值而不是函数引用）
+	const [resolvedTaskKey, setResolvedTaskKey] = useState<string | null>(() => {
+		if (!taskKey) return null;
+		return typeof taskKey === "function" ? taskKey() : taskKey;
+	});
+
+	// 当 taskKey 变化时，重新计算 resolved key
+	useEffect(() => {
+		const newKey = taskKey
+			? typeof taskKey === "function"
+				? taskKey()
+				: taskKey
+			: null;
+
+		// 只有当实际值变化时才更新（避免不必要的重新订阅）
+		if (newKey !== resolvedTaskKey) {
+			setResolvedTaskKey(newKey);
+		}
+	}, [taskKey, resolvedTaskKey]);
+
 	// 本地状态
 	const [localState, setLocalState] = useState<AsyncState<T, TError>>(() =>
 		createInitialState(),
@@ -66,9 +86,6 @@ export function useAsyncTask<Args extends any[], T, TError = unknown>(
 
 	// 存储最后执行的参数（用于重试和轮询）
 	const lastArgsRef = useRef<Args | null>(null);
-
-	// 当前使用的 taskKey
-	const currentTaskKeyRef = useRef<string | null>(null);
 
 	// 是否正在同步全局状态（避免循环更新）
 	const isSyncingRef = useRef(false);
@@ -106,13 +123,8 @@ export function useAsyncTask<Args extends any[], T, TError = unknown>(
 			// 更新最后执行的参数
 			lastArgsRef.current = args;
 
-			// 计算 taskKey
-			const key = currentOptions.taskKey
-				? typeof currentOptions.taskKey === "function"
-					? currentOptions.taskKey(...args)
-					: currentOptions.taskKey
-				: null;
-			currentTaskKeyRef.current = key;
+			// 使用 memoized 的 taskKey（避免闭包问题）
+			const key = resolvedTaskKey;
 
 			// 检查缓存
 			if (key && currentOptions.cacheTime && currentOptions.cacheTime > 0) {
@@ -249,7 +261,7 @@ export function useAsyncTask<Args extends any[], T, TError = unknown>(
 
 			return performAction();
 		},
-		[updateLocalState],
+		[updateLocalState, resolvedTaskKey],
 	);
 
 	/**
@@ -276,10 +288,9 @@ export function useAsyncTask<Args extends any[], T, TError = unknown>(
 	const reset = useCallback(() => {
 		cancel();
 
-		const key = currentTaskKeyRef.current;
-		if (key) {
+		if (resolvedTaskKey) {
 			// 清除全局状态和缓存
-			deleteState(key);
+			deleteState(resolvedTaskKey);
 		}
 
 		// 重置本地状态
@@ -287,16 +298,29 @@ export function useAsyncTask<Args extends any[], T, TError = unknown>(
 			setLocalState(createInitialState<T, TError>());
 		}
 		lastArgsRef.current = null;
-		currentTaskKeyRef.current = null;
-	}, [cancel]);
+	}, [cancel, resolvedTaskKey]);
 
 	/**
 	 * 订阅全局状态（如果有 taskKey）
 	 */
 	useEffect(() => {
-		if (!taskKey) return;
+		if (!resolvedTaskKey) return;
 
-		// 订阅状态变化
+		// 首次订阅时，同步全局状态到本地（如果存在）
+		const existingState = getState<T, TError>(resolvedTaskKey);
+		if (existingState) {
+			isSyncingRef.current = true;
+			setLocalState({
+				data: existingState.data,
+				loading: existingState.loading,
+				error: existingState.error,
+				retryCount: existingState.retryCount,
+				lastUpdated: existingState.lastUpdated,
+			});
+			isSyncingRef.current = false;
+		}
+
+		// 订阅后续状态变化
 		const syncState = (state: AsyncState<T, TError>) => {
 			if (!unmountedRef.current) {
 				isSyncingRef.current = true;
@@ -305,13 +329,10 @@ export function useAsyncTask<Args extends any[], T, TError = unknown>(
 			}
 		};
 
-		const unsubscribe = subscribe<T, TError>(
-			typeof taskKey === "function" ? "__dynamic__" : taskKey,
-			syncState,
-		);
+		const unsubscribe = subscribe<T, TError>(resolvedTaskKey, syncState);
 
 		return unsubscribe;
-	}, [taskKey]);
+	}, [resolvedTaskKey]);
 
 	/**
 	 * 处理 immediate - 仅在首次挂载时执行

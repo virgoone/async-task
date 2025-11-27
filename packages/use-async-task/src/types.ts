@@ -66,7 +66,7 @@ export interface UseAsyncTaskOptions<_T, Args extends any[]> {
 	 * - 字符串：固定 key
 	 * - 函数：根据执行参数动态生成 key
 	 */
-	taskKey?: string | ((...args: Args) => string);
+	taskKey?: string | (() => string);
 }
 
 /**

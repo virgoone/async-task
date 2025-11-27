@@ -385,7 +385,7 @@ function SharedComponent({ title }: { title: string }) {
 			};
 		},
 		{
-			taskKey: "shared-state", // 相同的 taskKey
+			taskKey: () => "shared-state", // 相同的 taskKey
 		},
 	);
 
