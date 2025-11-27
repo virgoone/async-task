@@ -106,7 +106,10 @@ export function useAsyncTask<Args extends any[], T, TError = unknown>(
 	const updateLocalState = useCallback(
 		(partial: Partial<AsyncState<T, TError>>) => {
 			if (!unmountedRef.current && !isSyncingRef.current) {
-				setLocalState((prev) => ({ ...prev, ...partial }));
+				setLocalState((prev: AsyncState<T, TError>) => ({
+					...prev,
+					...partial,
+				}));
 			}
 		},
 		[],
